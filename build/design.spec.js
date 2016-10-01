@@ -49,6 +49,9 @@ describe('design expressions', function () {
         expect(exp([String]).key === exp(Number)).toBe(true);
         expect(exp([String]).value === exp('')).toBe(true);
     });
+    it('a tuple', function () {
+        expect(exp([Number, Number]).isTuple).toBe(true);
+    });
     it('custom array alias', function () {
         expect(exp([String]) === exp([''])).toBe(true);
         expect(exp([String]) === exp(['String'])).toBe(true);
@@ -99,6 +102,7 @@ describe('Custom type declaration', function () {
     });
     it('static property', function () {
         var staticProperty = exp(MyBaseType).members['staticProperty'];
+        expect(staticProperty.value === exp(String)).toBe(true);
         expect(staticProperty.value === exp(String)).toBe(true);
     });
     /*

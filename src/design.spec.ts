@@ -42,6 +42,9 @@ describe('design expressions', () => {
         expect( exp( [String] ).key === exp( Number )           ).toBe( true );
         expect( exp( [String] ).value === exp( '' )             ).toBe( true );
     });
+    it('a tuple', ()=> {
+        expect( exp( [Number, Number] ).isTuple                 ).toBe( true );
+    });
     it('custom array alias', ()=> {
         expect( exp( [String] ) === exp( [''] )                 ).toBe( true );
         expect( exp( [String] ) === exp( ['String'] )           ).toBe( true );

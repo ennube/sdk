@@ -56,7 +56,7 @@ var Design = (function () {
             if (exp.length == 1)
                 return typeDesign.array(Design.exp(exp[0]));
             else
-                throw new Error("parsing tuples are not implemented");
+                return typeDesign.tuple.apply(typeDesign, exp.map(Design.exp));
         }
         // mappings
         if (expType === Object) {
@@ -93,7 +93,7 @@ var Design = (function () {
                         ("user design " + exprDesign.type + ", reflected design " + valueDesign.type));
                 valueDesign = exprDesign;
             }
-            targetDesign.members[memberName] = new MemberDesign(targetDesign, memberName, isStatic, valueDesign);
+            targetDesign.members[memberName] = new MemberInfo(targetDesign, memberName, isStatic, valueDesign);
         };
     };
     Design.class = function () {
@@ -112,6 +112,7 @@ var TypeDesign = (function () {
         this.base = base;
         this.isArray = false;
         this.isMapping = false;
+        this.isTuple = false;
         this.derived = new Map();
         this.members = base ?
             Object.create(base.members) :
@@ -168,12 +169,33 @@ var AnyTypeDesign = (function (_super) {
     return AnyTypeDesign;
 }(TypeDesign));
 exports.AnyTypeDesign = AnyTypeDesign;
+var MappingDesign = (function () {
+    function MappingDesign(typeDesign, key, value) {
+        this.typeDesign = typeDesign;
+        this.key = key;
+        this.value = value;
+        this.isTuple = false;
+        this.isArray = false;
+        this.isMapping = true;
+    }
+    Object.defineProperty(MappingDesign.prototype, "type", {
+        get: function () {
+            return this.typeDesign.type;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    return MappingDesign;
+}());
+exports.MappingDesign = MappingDesign;
 var AnyArrayDesign = (function (_super) {
     __extends(AnyArrayDesign, _super);
     function AnyArrayDesign() {
         _super.apply(this, arguments);
         this.isArray = true;
+        this.isTuple = false;
         this.arrayDesigns = new Map();
+        this.tupleDesigns = new Map();
     }
     Object.defineProperty(AnyArrayDesign.prototype, "key", {
         get: function () {
@@ -202,22 +224,31 @@ var AnyArrayDesign = (function (_super) {
         for (var _i = 0; _i < arguments.length; _i++) {
             values[_i - 0] = arguments[_i];
         }
-        /*
-        let arrayDesign = this.arrayDesigns.get(value);
-        if( arrayDesign === undefined )
-            arrayDesign = new ArrayDesign(this, value);
-        return arrayDesign;*/
+        if (values.length < 1)
+            throw new Error("zero length tuples not supported");
+        var currentMap = this.tupleDesigns;
+        var design = this;
+        var level = 0;
+        for (var _a = 0, values_1 = values; _a < values_1.length; _a++) {
+            var value = values_1[_a];
+            var nextDesign = currentMap.get(value);
+            if (nextDesign === undefined)
+                currentMap.set(value, nextDesign = new TupleDesign(this, values.slice(0, level)));
+            design = nextDesign;
+            level += 1;
+        }
+        return design;
     };
     return AnyArrayDesign;
 }(TypeDesign));
 exports.AnyArrayDesign = AnyArrayDesign;
 var ArrayDesign = (function () {
-    //tuples = new Map<Type, TupleDesign>();
     function ArrayDesign(typeDesign, value) {
         this.typeDesign = typeDesign;
         this.value = value;
-        this.isArray = true;
         this.isMapping = false;
+        this.isArray = true;
+        this.isTuple = false;
     }
     Object.defineProperty(ArrayDesign.prototype, "type", {
         get: function () {
@@ -236,72 +267,52 @@ var ArrayDesign = (function () {
     return ArrayDesign;
 }());
 exports.ArrayDesign = ArrayDesign;
-/*
-export class TupleDesign  implements Design {
-    tuples = new Map<Type, ArrayDesign>();
-    constructor(public typeDesign: AnyArrayDesign,
-                public value:Design) {
-    }
-}
-*/
-var MappingDesign = (function () {
-    function MappingDesign(typeDesign, key, value) {
+var TupleDesign = (function () {
+    function TupleDesign(typeDesign, value) {
         this.typeDesign = typeDesign;
-        this.key = key;
         this.value = value;
-        this.isArray = false;
-        this.isMapping = true;
+        this.isMapping = false;
+        this.isArray = true;
+        this.isTuple = true;
+        this.tupleDesigns = new Map();
     }
-    Object.defineProperty(MappingDesign.prototype, "type", {
+    Object.defineProperty(TupleDesign.prototype, "type", {
         get: function () {
             return this.typeDesign.type;
         },
         enumerable: true,
         configurable: true
     });
-    return MappingDesign;
+    Object.defineProperty(TupleDesign.prototype, "key", {
+        get: function () {
+            return numberDesign;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    return TupleDesign;
 }());
-exports.MappingDesign = MappingDesign;
+exports.TupleDesign = TupleDesign;
 /*
     Member delega sobre su value, sirve como un proxy del tipo
     que representa, puede ser una funcion o un dato.
 
 */
-var MemberDesign = (function () {
-    function MemberDesign(target, name, isStatic, value) {
+// Talvez member no deba implementar un diseño
+//  es informacion pura acerca de un
+var MemberInfo = (function () {
+    function MemberInfo(target, name, isStatic, value) {
         this.target = target;
         this.name = name;
         this.isStatic = isStatic;
         this.value = value;
     }
-    Object.defineProperty(MemberDesign.prototype, "type", {
-        // property delega sobre su diseño
-        get: function () {
-            return this.value.type;
-        },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(MemberDesign.prototype, "isArray", {
-        get: function () {
-            return this.value.isArray;
-        },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(MemberDesign.prototype, "isMapping", {
-        get: function () {
-            return this.value.isMapping;
-        },
-        enumerable: true,
-        configurable: true
-    });
-    return MemberDesign;
+    return MemberInfo;
 }());
-exports.MemberDesign = MemberDesign;
+exports.MemberInfo = MemberInfo;
 /*
 // ...method delega sobre un FunctionDesign...
-export class MethodDesign extends MemberDesign implements Design {
+export class MethodDesign extends MemberInfo implements Design {
     constructor(public target: TypeDesign,
                 public name:string,
                 public isStatic: boolean,

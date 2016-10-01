@@ -1,0 +1,32 @@
+{
+  "name": "@ennube/sdk",
+  "version": "0.0.1",
+  "description": "",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "scripts": {
+    "test": "tsc && jasmine JASMINE_CONFIG_PATH=jasmine.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ennube/sdk.git"
+  },
+  "author": "J.David Luque <jdavidls@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ennube/sdk/issues"
+  },
+  "homepage": "https://github.com/ennube/sdk#readme",
+  "dependencies": {
+    "change-case": "^3.0.0",
+    "core-js": "^2.4.1",
+    "cycler": "^0.1.2",
+    "reflect-metadata": "^0.1.8"
+  },
+  "devDependencies": {
+    "@types/change-case": "0.0.30",
+    "@types/jasmine": "^2.2.34",
+    "@types/reflect-metadata": "0.0.4",
+    "jasmine": "^2.5.2"
+  }
+}

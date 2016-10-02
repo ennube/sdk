@@ -32,29 +32,27 @@ describe('design expressions', function () {
     });
     it('any array', function () {
         expect(exp([]).isArray).toBe(true);
+        expect(exp([]).isTuple).toBe(false);
         expect(exp([]).isMapping).toBe(false);
         expect(exp([]).type === Array).toBe(true);
         expect(exp([]).key === exp(Number)).toBe(true);
         expect(exp([]).value === exp('*')).toBe(true);
     });
     it('any array alias', function () {
-        expect(exp([]) === exp(['*'])).toBe(true);
+        expect(exp([]) === exp(['...'])).toBe(true);
+        expect(exp([]) === exp(['*', '...'])).toBe(true);
         expect(exp([]) === exp(Array)).toBe(true);
         expect(exp([]) === exp('Array')).toBe(true);
     });
     it('custom array', function () {
-        expect(exp([String]).isArray).toBe(true);
-        expect(exp([String]).isMapping).toBe(false);
-        expect(exp([String]).type === Array).toBe(true);
-        expect(exp([String]).key === exp(Number)).toBe(true);
-        expect(exp([String]).value === exp('')).toBe(true);
-    });
-    it('a tuple', function () {
-        expect(exp([Number, Number]).isTuple).toBe(true);
+        expect(exp([String, '...']).isArray).toBe(true);
+        expect(exp([String, '...']).isMapping).toBe(false);
+        expect(exp([String, '...']).type === Array).toBe(true);
+        expect(exp([String, '...']).key === exp(Number)).toBe(true);
+        expect(exp([String, '...']).value === exp('')).toBe(true);
     });
     it('custom array alias', function () {
-        expect(exp([String]) === exp([''])).toBe(true);
-        expect(exp([String]) === exp(['String'])).toBe(true);
+        expect(exp([String, '...']) === exp(['', '...'])).toBe(true);
     });
     it('any mapping', function () {
         expect(exp({}).isArray).toBe(false);
@@ -80,17 +78,71 @@ describe('design expressions', function () {
         expect(exp({ Date: '*' }) === exp({ 'Date': 'Object' })).toBe(true);
     });
     // TODO: nesting
+    it('a tuple', function () {
+        var tuple = exp([Number, '*', String]);
+        expect(tuple.isTuple).toBe(true);
+        expect(tuple.length).toBe(3);
+        expect(tuple.value[0] === exp(Number)).toBe(true);
+        expect(tuple.value[1] === exp('*')).toBe(true);
+        expect(tuple.value[2] === exp(String)).toBe(true);
+    });
+    it('function prototype', function () {
+        var prototype = exp([Number, Number, Number], Date);
+        expect(prototype.kind == 'function').toBe(true);
+        expect(prototype.type == Function).toBe(true);
+        expect(prototype.parameters.length == 3).toBe(true);
+        expect(prototype.parameters.value[0] === exp(Number)).toBe(true);
+        expect(prototype.result === exp(Date)).toBe(true);
+    });
 });
 describe('Custom type declaration', function () {
     var exp = design_1.Design.exp;
     var MyBaseType = (function () {
         function MyBaseType() {
         }
-        MyBaseType.staticProperty = 'static';
+        Object.defineProperty(MyBaseType, "staticDescriptor", {
+            get: function () {
+                return {};
+            },
+            enumerable: true,
+            configurable: true
+        });
+        MyBaseType.staticMethod = function (year, month, day) {
+            return new Date();
+        };
+        Object.defineProperty(MyBaseType.prototype, "dynamicDescriptor", {
+            get: function () {
+                return { "a value": 6 };
+            },
+            enumerable: true,
+            configurable: true
+        });
         __decorate([
-            design_1.Design.member(), 
-            __metadata('design:type', String)
+            design_1.Design.member(Number), 
+            __metadata('design:type', Number)
+        ], MyBaseType.prototype, "dynamicProperty", void 0);
+        __decorate([
+            design_1.Design.member({ String: Number }), 
+            __metadata('design:type', Object)
+        ], MyBaseType.prototype, "dynamicDescriptor", null);
+        __decorate([
+            design_1.Design.member([RegExp], Date), 
+            __metadata('design:type', Function)
+        ], MyBaseType.prototype, "foooo", void 0);
+        __decorate([
+            design_1.Design.member([String, '...']), 
+            __metadata('design:type', Array)
         ], MyBaseType, "staticProperty", void 0);
+        __decorate([
+            design_1.Design.member({}), 
+            __metadata('design:type', Object)
+        ], MyBaseType, "staticDescriptor", null);
+        __decorate([
+            design_1.Design.member([Number, Number, Number], Date), 
+            __metadata('design:type', Function), 
+            __metadata('design:paramtypes', [Number, Number, Number]), 
+            __metadata('design:returntype', void 0)
+        ], MyBaseType, "staticMethod", null);
         MyBaseType = __decorate([
             design_1.Design.class(), 
             __metadata('design:paramtypes', [])
@@ -101,9 +153,32 @@ describe('Custom type declaration', function () {
         expect('staticProperty' in exp(MyBaseType).members).toBe(true);
     });
     it('static property', function () {
-        var staticProperty = exp(MyBaseType).members['staticProperty'];
-        expect(staticProperty.value === exp(String)).toBe(true);
-        expect(staticProperty.value === exp(String)).toBe(true);
+        var property = exp(MyBaseType).members['staticProperty'];
+        expect(property.name === 'staticProperty').toBe(true);
+        expect(property.value === exp([String, '...'])).toBe(true);
+        expect(property.isStatic).toBe(true);
+    });
+    it('static descriptor', function () {
+        var property = exp(MyBaseType).members['staticDescriptor'];
+        expect(property.value === exp({})).toBe(true);
+        expect(property.isStatic).toBe(true);
+    });
+    it('static method', function () {
+        var property = exp(MyBaseType).members['staticMethod'];
+        var prototype = exp([Number, Number, Number], Date);
+        expect(property.value === prototype).toBe(true);
+        expect(property.isStatic).toBe(true);
+    });
+    it('dynamic property', function () {
+        var property = exp(MyBaseType).members['dynamicProperty'];
+        expect(property.name === 'dynamicProperty').toBe(true);
+        expect(property.value === exp(Number)).toBe(true);
+        expect(property.isStatic).toBe(false);
+    });
+    it('dynamic descriptor', function () {
+        var property = exp(MyBaseType).members['dynamicDescriptor'];
+        expect(property.value === exp({ '': Number })).toBe(true);
+        expect(property.isStatic).toBe(false);
     });
     /*
         it('inheritance chain', ()=> {

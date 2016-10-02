@@ -5,7 +5,7 @@ import {Type, typeOf, baseType, derivedType, instanceOf} from './type';
 export abstract class Design {
     private constructor(){}
 
-
+    readonly name?: string;
     readonly type: Type;
     readonly derived?: Map<Type, Design>;
 
@@ -18,6 +18,7 @@ export abstract class Design {
         [memberName:string]: MemberInfo
     };
 
+    readonly kind: string;
 
     readonly isArray: boolean;
     readonly isTuple: boolean;
@@ -38,7 +39,10 @@ export abstract class Design {
      */
     readonly value?: Design | Design[];
 
+    readonly length?: Number;
 
+    readonly parameters?: Design;
+    readonly result?: Design;
 
 /*
     static get any() {
@@ -48,7 +52,7 @@ export abstract class Design {
     /*
         Parse a design expression
      */
-    static exp(exp): Design {
+    static exp(exp, result?): Design {
         if( instanceOf(exp, Type) ) {
             if(exp.name == '') {
                 throw new Error('function parsing not implemented');
@@ -89,10 +93,23 @@ export abstract class Design {
 
             if( exp.length == 0 )
                 return typeDesign;
-            if( exp.length == 1)
-                return typeDesign.array( Design.exp(exp[0]) );
-            else
-                return typeDesign.tuple( ...exp.map(Design.exp) )
+
+            if( exp[exp.length-1] == '...') { // implicit array
+                exp.pop();
+
+                if( exp.length == 0 )
+                    return typeDesign;
+                if( exp.length == 1)
+                    return typeDesign.array( Design.exp(exp[0]) );
+                else
+                    throw new Error(`arrays can only contains one element`);
+            }
+
+            let tuple = typeDesign.tuple( exp.map(Design.exp) );
+
+            return result?
+                tuple.returns( Design.exp(result) ):
+                tuple;
         }
 
         // mappings
@@ -111,30 +128,40 @@ export abstract class Design {
     }
 
 
-    static member(value?: any, ...params: any[]){
+    static member(value, result?){
         return (target:any, memberName:string,  descriptor?:any) => {
 
             let isStatic = instanceOf(target, Type);
             let targetType = isStatic? target: target.constructor;
             let targetDesign = TypeDesign.declare(targetType);
+
             let reflectedType = Reflect.getMetadata('design:type', target, memberName);
 
             console.log(`decl member ${targetType.name}.${memberName}`, isStatic? 'static': 'dynamic');
-            console.log(` reflected type ${reflectedType.name}`);
+            //console.log(` reflected type ${reflectedType.name}`);
+            console.log('descriptor', descriptor);
+
+
+            if( reflectedType === Function ) {
+
+            } else {
+
+            }
 
             let valueDesign: Design = TypeDesign.get(reflectedType);
-            if(value !== undefined) {
-                let exprDesign = Design.exp(value);
+//            if(value !== undefined) {
+            let exprDesign = Design.exp(value, result);
 
-                // must be type compatible with reflected
-                if( exprDesign.type !== valueDesign.type &&
-                    !derivedType(exprDesign.type, valueDesign.type))
-                    throw new Error(`especified type design not match with reflected metadata design`+
-                                    `in ${targetType.name}.${memberName} member: `+
-                                    `user design ${exprDesign.type}, reflected design ${valueDesign.type}`);
+            // must be type compatible with reflected
+            if( exprDesign.type !== valueDesign.type &&
+                !derivedType(exprDesign.type, valueDesign.type))
+                throw new Error(`especified type design not match with reflected metadata design`+
+                                `in ${targetType.name}.${memberName} member: ` +
+                                `user design ${exprDesign.type.name} ` +
+                                `reflected design ${valueDesign.type.name}`);
 
-                valueDesign = exprDesign;
-            }
+            valueDesign = exprDesign;
+//            }
 
             targetDesign.members[memberName] = new MemberInfo(
                     targetDesign,
@@ -157,11 +184,27 @@ export abstract class Design {
 }
 
 
-export class TypeDesign implements Design {
+interface TypeMember {
+    isStatic: boolean;
+    value: Design; // puede apuntar a un FunctionDesign
+    // metadata and hooks here??
+};
 
-    isArray = false;
-    isMapping = false;
-    isTuple = false;
+export class MemberInfo {
+    constructor(public target: TypeDesign,
+                public name: string,
+                public isStatic: boolean,
+                public value: Design
+            ) {
+    }
+
+}
+
+export class TypeDesign implements Design {
+    readonly kind: string = 'type';
+    readonly isArray = false;
+    readonly isMapping = false;
+    readonly isTuple = false;
 
     derived = new Map<Type, TypeDesign>();
     members: {
@@ -209,6 +252,10 @@ export class TypeDesign implements Design {
         return typeDesign;
     }
 
+    toString() {
+        return this.type.name;
+    }
+
     derivedFrom(baseDesign: TypeDesign) {
         return this.type === baseDesign.type ||
                 derivedType(this.type, baseDesign.type);
@@ -230,13 +277,16 @@ export class AnyTypeDesign extends TypeDesign implements Design {
                 mappingDesign = new MappingDesign(this, key, value));
         return mappingDesign;
     }
+
+
 }
 
 
 export class MappingDesign implements Design {
-    isTuple = false;
-    isArray = false;
-    isMapping = true;
+    readonly kind: string = 'mapping';
+    readonly isTuple = false;
+    readonly isArray = false;
+    readonly isMapping = true;
 
     constructor(public typeDesign: AnyTypeDesign,
                 public key:Design,
@@ -247,12 +297,17 @@ export class MappingDesign implements Design {
         return this.typeDesign.type;
     }
 
+    toString() {
+        return `{${this.key.toString()}: ${this.value.toString()}}`;
+    }
+
+
 }
 
 export class AnyArrayDesign extends TypeDesign implements Design {
-
-    isArray = true;
-    isTuple = false;
+    readonly kind: string = 'array';
+    readonly isArray = true;
+    readonly isTuple = false;
     get key() {
         return numberDesign;
     }
@@ -260,46 +315,46 @@ export class AnyArrayDesign extends TypeDesign implements Design {
         return anyDesign;
     }
 
-    arrayDesigns = new Map<Design, ArrayDesign>();
+    variadicDesigns = new Map<Design, VariadicDesign>();
     tupleDesigns = new Map<Design, TupleDesign>();
 
     array(value: Design): Design {
         if( value === anyDesign )
             return this;
 
-        let arrayDesign = this.arrayDesigns.get(value);
+        let arrayDesign = this.variadicDesigns.get(value);
         if( arrayDesign === undefined )
-            this.arrayDesigns.set(value,
-                arrayDesign = new ArrayDesign(this, value));
+            this.variadicDesigns.set(value,
+                arrayDesign = new VariadicDesign(this, value));
 
         return arrayDesign;
     }
 
-    tuple(...values: Design[]) {
-        if( values.length < 1 )
-            throw new Error(`zero length tuples not supported`);
-
+    tuple(values: Design[]) {
         let currentMap = this.tupleDesigns;
-        let design:Design = this;
-
-        let level = 0;
+        let design: TupleDesign = zeroLengthTuple;
+        let level = 1;
         for(let value of values) {
             let nextDesign = currentMap.get(value)
             if( nextDesign === undefined )
                 currentMap.set(value,
                     nextDesign = new TupleDesign(this, values.slice(0, level)));
+
+            currentMap = nextDesign.tupleDesigns;
             design = nextDesign;
             level += 1;
         }
+
         return design;
     }
 
 }
 
-export class ArrayDesign implements Design {
-    isMapping = false;
-    isArray= true;
-    isTuple = false;
+export class VariadicDesign implements Design {
+    readonly kind: string = 'array';
+    readonly isMapping = false;
+    readonly isArray= true;
+    readonly isTuple = false;
     constructor(public typeDesign: AnyArrayDesign,
                 public value:Design) {
     }
@@ -310,15 +365,21 @@ export class ArrayDesign implements Design {
     get key() {
         return numberDesign;
     }
+    toString() {
+        return `[${this.value.toString()}, '...']`;
+    }
 
 }
 
 export class TupleDesign implements Design {
-    isMapping = false;
-    isArray = true;
-    isTuple = true;
+    readonly kind: string = 'tuple';
+    readonly isMapping = false;
+    readonly isArray = true;
+    readonly isTuple = true;
 
-    tupleDesigns = new Map<Type, TupleDesign>();
+    tupleDesigns = new Map<Design, TupleDesign>();
+    functionDesigns = new Map<Design, FunctionDesign>();
+
     constructor(public typeDesign: AnyArrayDesign,
                 public value:Design[]) {
     }
@@ -328,59 +389,49 @@ export class TupleDesign implements Design {
     get key() {
         return numberDesign;
     }
+    get length() {
+        return this.value.length;
+    }
 
 
-}
+    toString() {
+        return `[${this.value.toString()}, '...']`;
+    }
 
 
-
-/*
-    Member delega sobre su value, sirve como un proxy del tipo
-    que representa, puede ser una funcion o un dato.
-
-*/
-
-// Talvez member no deba implementar un diseño
-//  es informacion pura acerca de un
-export class MemberInfo {
-    constructor(public target: TypeDesign,
-                public name:string,
-                public isStatic: boolean,
-                public value: Design
-            ) {
+    returns(result:Design) {
+        let functionDesign = this.functionDesigns.get(result);
+        if( functionDesign === undefined )
+            this.functionDesigns.set( result,
+                functionDesign = new FunctionDesign(this, result));
+        return functionDesign;
     }
 
 }
 
-/*
-// ...method delega sobre un FunctionDesign...
-export class MethodDesign extends MemberInfo implements Design {
-    constructor(public target: TypeDesign,
-                public name:string,
-                public isStatic: boolean,
-                public value: Design
-            ) {
-            super(target, name, isStatic);
+export class FunctionDesign implements Design {
+    readonly kind = 'function';
+    readonly isMapping = false;
+    readonly isArray = true;
+    readonly isTuple = true;
+    readonly isFunction = true;
+
+    constructor(public parameters: TupleDesign,
+                public result: Design){
     }
 
-    // property delega sobre su diseño
     get type() {
-        return this.value.type;
+        return Function;
     }
-    get isArray() {
-        return this.value.isArray;
-    }
-    get isMapping() {
-        return this.value.isMapping;
-    }
-}
+};
 
-*/
+
 
 const allTypeDesigns = new Map<Type, TypeDesign>();
 
 const anyDesign = TypeDesign.declare(Object) as AnyTypeDesign;
 const anyArrayDesign = TypeDesign.declare(Array) as AnyArrayDesign;
+const zeroLengthTuple = new TupleDesign(anyArrayDesign, []);
 
 const booleanDesign = TypeDesign.declare(Boolean);
 const numberDesign = TypeDesign.declare(Number);

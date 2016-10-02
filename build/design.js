@@ -16,7 +16,7 @@ var Design = (function () {
     /*
         Parse a design expression
      */
-    Design.exp = function (exp) {
+    Design.exp = function (exp, result) {
         if (type_1.instanceOf(exp, type_1.Type)) {
             if (exp.name == '') {
                 throw new Error('function parsing not implemented');
@@ -53,10 +53,19 @@ var Design = (function () {
                 throw new Error("Unknow type " + exp.name);
             if (exp.length == 0)
                 return typeDesign;
-            if (exp.length == 1)
-                return typeDesign.array(Design.exp(exp[0]));
-            else
-                return typeDesign.tuple.apply(typeDesign, exp.map(Design.exp));
+            if (exp[exp.length - 1] == '...') {
+                exp.pop();
+                if (exp.length == 0)
+                    return typeDesign;
+                if (exp.length == 1)
+                    return typeDesign.array(Design.exp(exp[0]));
+                else
+                    throw new Error("arrays can only contains one element");
+            }
+            var tuple = typeDesign.tuple(exp.map(Design.exp));
+            return result ?
+                tuple.returns(Design.exp(result)) :
+                tuple;
         }
         // mappings
         if (expType === Object) {
@@ -70,29 +79,31 @@ var Design = (function () {
         }
         throw new Error("Unknow type design expresion " + exp);
     };
-    Design.member = function (value) {
-        var params = [];
-        for (var _i = 1; _i < arguments.length; _i++) {
-            params[_i - 1] = arguments[_i];
-        }
+    Design.member = function (value, result) {
         return function (target, memberName, descriptor) {
             var isStatic = type_1.instanceOf(target, type_1.Type);
             var targetType = isStatic ? target : target.constructor;
             var targetDesign = TypeDesign.declare(targetType);
             var reflectedType = Reflect.getMetadata('design:type', target, memberName);
             console.log("decl member " + targetType.name + "." + memberName, isStatic ? 'static' : 'dynamic');
-            console.log(" reflected type " + reflectedType.name);
-            var valueDesign = TypeDesign.get(reflectedType);
-            if (value !== undefined) {
-                var exprDesign = Design.exp(value);
-                // must be type compatible with reflected
-                if (exprDesign.type !== valueDesign.type &&
-                    !type_1.derivedType(exprDesign.type, valueDesign.type))
-                    throw new Error("especified type design not match with reflected metadata design" +
-                        ("in " + targetType.name + "." + memberName + " member: ") +
-                        ("user design " + exprDesign.type + ", reflected design " + valueDesign.type));
-                valueDesign = exprDesign;
+            //console.log(` reflected type ${reflectedType.name}`);
+            console.log('descriptor', descriptor);
+            if (reflectedType === Function) {
             }
+            else {
+            }
+            var valueDesign = TypeDesign.get(reflectedType);
+            //            if(value !== undefined) {
+            var exprDesign = Design.exp(value, result);
+            // must be type compatible with reflected
+            if (exprDesign.type !== valueDesign.type &&
+                !type_1.derivedType(exprDesign.type, valueDesign.type))
+                throw new Error("especified type design not match with reflected metadata design" +
+                    ("in " + targetType.name + "." + memberName + " member: ") +
+                    ("user design " + exprDesign.type.name + " ") +
+                    ("reflected design " + valueDesign.type.name));
+            valueDesign = exprDesign;
+            //            }
             targetDesign.members[memberName] = new MemberInfo(targetDesign, memberName, isStatic, valueDesign);
         };
     };
@@ -105,11 +116,23 @@ var Design = (function () {
     return Design;
 }());
 exports.Design = Design;
+;
+var MemberInfo = (function () {
+    function MemberInfo(target, name, isStatic, value) {
+        this.target = target;
+        this.name = name;
+        this.isStatic = isStatic;
+        this.value = value;
+    }
+    return MemberInfo;
+}());
+exports.MemberInfo = MemberInfo;
 var TypeDesign = (function () {
     // parameters: TupleDesign;
     function TypeDesign(type, base) {
         this.type = type;
         this.base = base;
+        this.kind = 'type';
         this.isArray = false;
         this.isMapping = false;
         this.isTuple = false;
@@ -144,6 +167,9 @@ var TypeDesign = (function () {
             throw new Error("type not declared " + type.name);
         return typeDesign;
     };
+    TypeDesign.prototype.toString = function () {
+        return this.type.name;
+    };
     TypeDesign.prototype.derivedFrom = function (baseDesign) {
         return this.type === baseDesign.type ||
             type_1.derivedType(this.type, baseDesign.type);
@@ -174,6 +200,7 @@ var MappingDesign = (function () {
         this.typeDesign = typeDesign;
         this.key = key;
         this.value = value;
+        this.kind = 'mapping';
         this.isTuple = false;
         this.isArray = false;
         this.isMapping = true;
@@ -185,6 +212,9 @@ var MappingDesign = (function () {
         enumerable: true,
         configurable: true
     });
+    MappingDesign.prototype.toString = function () {
+        return "{" + this.key.toString() + ": " + this.value.toString() + "}";
+    };
     return MappingDesign;
 }());
 exports.MappingDesign = MappingDesign;
@@ -192,9 +222,10 @@ var AnyArrayDesign = (function (_super) {
     __extends(AnyArrayDesign, _super);
     function AnyArrayDesign() {
         _super.apply(this, arguments);
+        this.kind = 'array';
         this.isArray = true;
         this.isTuple = false;
-        this.arrayDesigns = new Map();
+        this.variadicDesigns = new Map();
         this.tupleDesigns = new Map();
     }
     Object.defineProperty(AnyArrayDesign.prototype, "key", {
@@ -214,26 +245,21 @@ var AnyArrayDesign = (function (_super) {
     AnyArrayDesign.prototype.array = function (value) {
         if (value === anyDesign)
             return this;
-        var arrayDesign = this.arrayDesigns.get(value);
+        var arrayDesign = this.variadicDesigns.get(value);
         if (arrayDesign === undefined)
-            this.arrayDesigns.set(value, arrayDesign = new ArrayDesign(this, value));
+            this.variadicDesigns.set(value, arrayDesign = new VariadicDesign(this, value));
         return arrayDesign;
     };
-    AnyArrayDesign.prototype.tuple = function () {
-        var values = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            values[_i - 0] = arguments[_i];
-        }
-        if (values.length < 1)
-            throw new Error("zero length tuples not supported");
+    AnyArrayDesign.prototype.tuple = function (values) {
         var currentMap = this.tupleDesigns;
-        var design = this;
-        var level = 0;
-        for (var _a = 0, values_1 = values; _a < values_1.length; _a++) {
-            var value = values_1[_a];
+        var design = zeroLengthTuple;
+        var level = 1;
+        for (var _i = 0, values_1 = values; _i < values_1.length; _i++) {
+            var value = values_1[_i];
             var nextDesign = currentMap.get(value);
             if (nextDesign === undefined)
                 currentMap.set(value, nextDesign = new TupleDesign(this, values.slice(0, level)));
+            currentMap = nextDesign.tupleDesigns;
             design = nextDesign;
             level += 1;
         }
@@ -242,39 +268,45 @@ var AnyArrayDesign = (function (_super) {
     return AnyArrayDesign;
 }(TypeDesign));
 exports.AnyArrayDesign = AnyArrayDesign;
-var ArrayDesign = (function () {
-    function ArrayDesign(typeDesign, value) {
+var VariadicDesign = (function () {
+    function VariadicDesign(typeDesign, value) {
         this.typeDesign = typeDesign;
         this.value = value;
+        this.kind = 'array';
         this.isMapping = false;
         this.isArray = true;
         this.isTuple = false;
     }
-    Object.defineProperty(ArrayDesign.prototype, "type", {
+    Object.defineProperty(VariadicDesign.prototype, "type", {
         get: function () {
             return this.typeDesign.type;
         },
         enumerable: true,
         configurable: true
     });
-    Object.defineProperty(ArrayDesign.prototype, "key", {
+    Object.defineProperty(VariadicDesign.prototype, "key", {
         get: function () {
             return numberDesign;
         },
         enumerable: true,
         configurable: true
     });
-    return ArrayDesign;
+    VariadicDesign.prototype.toString = function () {
+        return "[" + this.value.toString() + ", '...']";
+    };
+    return VariadicDesign;
 }());
-exports.ArrayDesign = ArrayDesign;
+exports.VariadicDesign = VariadicDesign;
 var TupleDesign = (function () {
     function TupleDesign(typeDesign, value) {
         this.typeDesign = typeDesign;
         this.value = value;
+        this.kind = 'tuple';
         this.isMapping = false;
         this.isArray = true;
         this.isTuple = true;
         this.tupleDesigns = new Map();
+        this.functionDesigns = new Map();
     }
     Object.defineProperty(TupleDesign.prototype, "type", {
         get: function () {
@@ -290,53 +322,50 @@ var TupleDesign = (function () {
         enumerable: true,
         configurable: true
     });
+    Object.defineProperty(TupleDesign.prototype, "length", {
+        get: function () {
+            return this.value.length;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    TupleDesign.prototype.toString = function () {
+        return "[" + this.value.toString() + ", '...']";
+    };
+    TupleDesign.prototype.returns = function (result) {
+        var functionDesign = this.functionDesigns.get(result);
+        if (functionDesign === undefined)
+            this.functionDesigns.set(result, functionDesign = new FunctionDesign(this, result));
+        return functionDesign;
+    };
     return TupleDesign;
 }());
 exports.TupleDesign = TupleDesign;
-/*
-    Member delega sobre su value, sirve como un proxy del tipo
-    que representa, puede ser una funcion o un dato.
-
-*/
-// Talvez member no deba implementar un diseño
-//  es informacion pura acerca de un
-var MemberInfo = (function () {
-    function MemberInfo(target, name, isStatic, value) {
-        this.target = target;
-        this.name = name;
-        this.isStatic = isStatic;
-        this.value = value;
+var FunctionDesign = (function () {
+    function FunctionDesign(parameters, result) {
+        this.parameters = parameters;
+        this.result = result;
+        this.kind = 'function';
+        this.isMapping = false;
+        this.isArray = true;
+        this.isTuple = true;
+        this.isFunction = true;
     }
-    return MemberInfo;
+    Object.defineProperty(FunctionDesign.prototype, "type", {
+        get: function () {
+            return Function;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    return FunctionDesign;
 }());
-exports.MemberInfo = MemberInfo;
-/*
-// ...method delega sobre un FunctionDesign...
-export class MethodDesign extends MemberInfo implements Design {
-    constructor(public target: TypeDesign,
-                public name:string,
-                public isStatic: boolean,
-                public value: Design
-            ) {
-            super(target, name, isStatic);
-    }
-
-    // property delega sobre su diseño
-    get type() {
-        return this.value.type;
-    }
-    get isArray() {
-        return this.value.isArray;
-    }
-    get isMapping() {
-        return this.value.isMapping;
-    }
-}
-
-*/
+exports.FunctionDesign = FunctionDesign;
+;
 var allTypeDesigns = new Map();
 var anyDesign = TypeDesign.declare(Object);
 var anyArrayDesign = TypeDesign.declare(Array);
+var zeroLengthTuple = new TupleDesign(anyArrayDesign, []);
 var booleanDesign = TypeDesign.declare(Boolean);
 var numberDesign = TypeDesign.declare(Number);
 var stringDesign = TypeDesign.declare(String);

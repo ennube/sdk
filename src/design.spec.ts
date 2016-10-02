@@ -25,29 +25,27 @@ describe('design expressions', () => {
     });
     it('any array', ()=> {
         expect( exp( [] ).isArray                               ).toBe( true );
+        expect( exp( [] ).isTuple                               ).toBe( false );
         expect( exp( [] ).isMapping                             ).toBe( false );
         expect( exp( [] ).type === Array                        ).toBe( true );
         expect( exp( [] ).key === exp( Number )                 ).toBe( true );
         expect( exp( [] ).value === exp( '*' )                  ).toBe( true );
     });
     it('any array alias', ()=> {
-        expect( exp( [] ) === exp( ['*'] )                      ).toBe( true );
+        expect( exp( [] ) === exp( ['...'] )                    ).toBe( true );
+        expect( exp( [] ) === exp( ['*', '...'] )               ).toBe( true );
         expect( exp( [] ) === exp( Array )                      ).toBe( true );
         expect( exp( [] ) === exp( 'Array' )                    ).toBe( true );
     });
     it('custom array', ()=> {
-        expect( exp( [String] ).isArray                         ).toBe( true );
-        expect( exp( [String] ).isMapping                       ).toBe( false );
-        expect( exp( [String] ).type === Array                  ).toBe( true );
-        expect( exp( [String] ).key === exp( Number )           ).toBe( true );
-        expect( exp( [String] ).value === exp( '' )             ).toBe( true );
-    });
-    it('a tuple', ()=> {
-        expect( exp( [Number, Number] ).isTuple                 ).toBe( true );
+        expect( exp( [String, '...'] ).isArray                  ).toBe( true );
+        expect( exp( [String, '...'] ).isMapping                ).toBe( false );
+        expect( exp( [String, '...'] ).type === Array           ).toBe( true );
+        expect( exp( [String, '...'] ).key === exp( Number )    ).toBe( true );
+        expect( exp( [String, '...'] ).value === exp( '' )      ).toBe( true );
     });
     it('custom array alias', ()=> {
-        expect( exp( [String] ) === exp( [''] )                 ).toBe( true );
-        expect( exp( [String] ) === exp( ['String'] )           ).toBe( true );
+        expect( exp( [String, '...'] ) === exp( ['', '...'] )   ).toBe( true );
     });
     it('any mapping', ()=> {
         expect( exp( {} ).isArray                               ).toBe( false );
@@ -73,6 +71,26 @@ describe('design expressions', () => {
         expect( exp( {Date:'*'} ) === exp( {'Date':'Object'} )  ).toBe( true );
     });
     // TODO: nesting
+    it('a tuple', ()=> {
+        let tuple = exp( [Number, '*', String] );
+
+        expect( tuple.isTuple                                   ).toBe( true );
+        expect( tuple.length                                    ).toBe( 3 );
+        expect( tuple.value[0] === exp( Number )                ).toBe( true );
+        expect( tuple.value[1] === exp( '*' )                   ).toBe( true );
+        expect( tuple.value[2] === exp( String )                ).toBe( true );
+    });
+
+    it('function prototype', ()=> {
+        let prototype = exp( [Number, Number, Number], Date );
+
+        expect( prototype.kind == 'function'                    ).toBe( true );
+        expect( prototype.type == Function                      ).toBe( true );
+        expect( prototype.parameters.length == 3                ).toBe( true );
+        expect( prototype.parameters.value[0] === exp( Number ) ).toBe( true );
+        expect( prototype.result === exp( Date )                ).toBe( true );
+    });
+
 });
 
 
@@ -82,21 +100,69 @@ describe('Custom type declaration', () => {
 
     @Design.class()
     class MyBaseType {
-        @Design.member()
-        static staticProperty: string = 'static';
+        @Design.member( [String, '...'] )
+        static staticProperty: string[];
+
+        @Design.member( {} )
+        static get staticDescriptor() {
+            return {};
+        }
+
+        @Design.member( [Number, Number, Number], Date )
+        static staticMethod(year:number, month:number, day:number) {
+            return new Date();
+        }
+
+
+        @Design.member( Number )
+        dynamicProperty: number;
+
+        @Design.member( {String:Number} )
+        get dynamicDescriptor() {
+            return {"a value": 6};
+        }
+
+        @Design.member( [RegExp], Date )
+        foooo: (Number) => RegExp;
+
     }
 
-    it('members', ()=> {
+    it('members', () => {
         expect( 'staticProperty' in exp( MyBaseType ).members   ).toBe( true );
     });
-
     it('static property', ()=> {
-        let staticProperty = exp( MyBaseType ).members['staticProperty'];
+        let property = exp( MyBaseType ).members['staticProperty'];
 
-        expect( staticProperty.value === exp( String )         ).toBe( true );
-        expect( staticProperty.value === exp( String )         ).toBe( true );
+        expect( property.name === 'staticProperty'              ).toBe( true );
+        expect( property.value === exp( [String, '...'] )       ).toBe( true );
+        expect( property.isStatic                               ).toBe( true );
     });
+    it('static descriptor', ()=> {
+        let property = exp( MyBaseType ).members['staticDescriptor'];
 
+        expect( property.value === exp( {} )                    ).toBe( true );
+        expect( property.isStatic                               ).toBe( true );
+    });
+    it('static method', ()=> {
+        let property = exp( MyBaseType ).members['staticMethod'];
+        let prototype = exp( [Number, Number, Number], Date );
+
+        expect( property.value === prototype                    ).toBe( true );
+        expect( property.isStatic                               ).toBe( true );
+    });
+    it('dynamic property', ()=> {
+        let property = exp( MyBaseType ).members['dynamicProperty'];
+
+        expect( property.name === 'dynamicProperty'             ).toBe( true );
+        expect( property.value === exp( Number )                ).toBe( true );
+        expect( property.isStatic                               ).toBe( false );
+    });
+    it('dynamic descriptor', ()=> {
+        let property = exp( MyBaseType ).members['dynamicDescriptor'];
+
+        expect( property.value === exp( {'':Number} )           ).toBe( true );
+        expect( property.isStatic                               ).toBe( false );
+    });
 
 
 

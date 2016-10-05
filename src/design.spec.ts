@@ -100,6 +100,7 @@ describe('Custom type declaration', () => {
 
     @Design.class()
     class MyBaseType {
+
         @Design.member( [String, '...'] )
         static staticProperty: string[];
 
@@ -113,7 +114,6 @@ describe('Custom type declaration', () => {
             return new Date();
         }
 
-
         @Design.member( Number )
         dynamicProperty: number;
 
@@ -121,47 +121,47 @@ describe('Custom type declaration', () => {
         get dynamicDescriptor() {
             return {"a value": 6};
         }
-
-        @Design.member( [RegExp], Date )
-        foooo: (Number) => RegExp;
-
+/*
+        @Design.member( [], void 0 )
+        dynamicMethod(): void {
+            return
+        }
+*/
     }
 
     it('members', () => {
-        expect( 'staticProperty' in exp( MyBaseType ).members   ).toBe( true );
+        expect( exp( MyBaseType ).members.has('staticProperty') ).toBe( true );
     });
-    it('static property', ()=> {
-        let property = exp( MyBaseType ).members['staticProperty'];
+    it('static member', ()=> {
+        let member = exp( MyBaseType ).members.get('staticProperty');
 
-        expect( property.name === 'staticProperty'              ).toBe( true );
-        expect( property.value === exp( [String, '...'] )       ).toBe( true );
-        expect( property.isStatic                               ).toBe( true );
+        expect( member.isStatic                                 ).toBe( true );
+        expect( member.design === exp( [String, '...'] )        ).toBe( true );
     });
     it('static descriptor', ()=> {
-        let property = exp( MyBaseType ).members['staticDescriptor'];
+        let member = exp( MyBaseType ).members.get('staticDescriptor');
 
-        expect( property.value === exp( {} )                    ).toBe( true );
-        expect( property.isStatic                               ).toBe( true );
+        expect( member.isStatic                                 ).toBe( true );
+        expect( member.design === exp( {} )                     ).toBe( true );
     });
     it('static method', ()=> {
-        let property = exp( MyBaseType ).members['staticMethod'];
+        let member = exp( MyBaseType ).members.get('staticMethod');
         let prototype = exp( [Number, Number, Number], Date );
 
-        expect( property.value === prototype                    ).toBe( true );
-        expect( property.isStatic                               ).toBe( true );
+        expect( member.isStatic                                 ).toBe( true );
+        expect( member.design === prototype                     ).toBe( true );
     });
-    it('dynamic property', ()=> {
-        let property = exp( MyBaseType ).members['dynamicProperty'];
+    it('dynamic member', ()=> {
+        let member = exp( MyBaseType ).members.get('dynamicProperty');
 
-        expect( property.name === 'dynamicProperty'             ).toBe( true );
-        expect( property.value === exp( Number )                ).toBe( true );
-        expect( property.isStatic                               ).toBe( false );
+        expect( member.isStatic                                 ).toBe( false );
+        expect( member.design === exp( Number )                 ).toBe( true );
     });
     it('dynamic descriptor', ()=> {
-        let property = exp( MyBaseType ).members['dynamicDescriptor'];
+        let member = exp( MyBaseType ).members.get('dynamicDescriptor');
 
-        expect( property.value === exp( {'':Number} )           ).toBe( true );
-        expect( property.isStatic                               ).toBe( false );
+        expect( member.isStatic                                 ).toBe( false );
+        expect( member.design === exp( {'':Number} )            ).toBe( true );
     });
 
 

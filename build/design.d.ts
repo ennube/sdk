@@ -1,14 +1,17 @@
-import './polyfill';
+import 'core-js/es6/map';
+import 'core-js/es6/reflect';
+import 'core-js/es7/reflect';
 import { Type } from './type';
+export declare enum DesignKind {
+    Type = 0,
+    Array = 1,
+}
 export declare abstract class Design {
     private constructor();
-    readonly name?: string;
     readonly type: Type;
     readonly derived?: Map<Type, Design>;
     readonly base?: Design;
-    readonly members?: {
-        [memberName: string]: MemberInfo;
-    };
+    readonly members?: Map<string, TypeMember>;
     readonly kind: string;
     readonly isArray: boolean;
     readonly isTuple: boolean;
@@ -19,15 +22,14 @@ export declare abstract class Design {
     readonly parameters?: Design;
     readonly result?: Design;
     static exp(exp: any, result?: any): Design;
+    static get(type: Type): TypeDesign;
     static member(value: any, result?: any): (target: any, memberName: string, descriptor?: any) => void;
     static class(): (type: Type) => void;
 }
-export declare class MemberInfo {
-    target: TypeDesign;
-    name: string;
+export interface TypeMember {
     isStatic: boolean;
-    value: Design;
-    constructor(target: TypeDesign, name: string, isStatic: boolean, value: Design);
+    design: Design;
+    name: string;
 }
 export declare class TypeDesign implements Design {
     type: Type;
@@ -37,12 +39,9 @@ export declare class TypeDesign implements Design {
     readonly isMapping: boolean;
     readonly isTuple: boolean;
     derived: Map<Type, TypeDesign>;
-    members: {
-        [memberName: string]: MemberInfo;
-    };
+    members: Map<string, TypeMember>;
     protected constructor(type: Type, base: TypeDesign);
     static declare(type: Type): TypeDesign;
-    static get(type: Type): TypeDesign;
     toString(): string;
     derivedFrom(baseDesign: TypeDesign): boolean;
 }

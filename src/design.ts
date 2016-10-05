@@ -1,11 +1,16 @@
-import './polyfill';
+import 'core-js/es6/map';
+import 'core-js/es6/reflect';
+import 'core-js/es7/reflect';
+
 import {Type, typeOf, baseType, derivedType, instanceOf} from './type';
 
-
+export enum DesignKind {
+    Type,
+    Array,
+};
 export abstract class Design {
-    private constructor(){}
+    private constructor() { }
 
-    readonly name?: string;
     readonly type: Type;
     readonly derived?: Map<Type, Design>;
 
@@ -14,9 +19,7 @@ export abstract class Design {
      */
 
     readonly base?: Design;
-    readonly members?: {
-        [memberName:string]: MemberInfo
-    };
+    readonly members?: Map<string, TypeMember>;
 
     readonly kind: string;
 
@@ -58,7 +61,7 @@ export abstract class Design {
                 throw new Error('function parsing not implemented');
             }
             else {
-                return TypeDesign.get(exp);
+                return Design.get(exp);
             }
         }
 
@@ -87,7 +90,7 @@ export abstract class Design {
         // array parsing
         if( instanceOf(exp, Array) ) {
 
-            let typeDesign = TypeDesign.get(expType)as AnyArrayDesign;
+            let typeDesign = Design.get(expType)as AnyArrayDesign;
             if( typeDesign === undefined )
                 throw new Error(`Unknow type ${exp.name}`);
 
@@ -127,6 +130,16 @@ export abstract class Design {
         throw new Error(`Unknow type design expresion ${exp}`);
     }
 
+    static get(type:Type) {
+        if( type === undefined || type === null)
+            throw new Error(`Unknow type ${type.name}`);
+
+        let typeDesign = allTypeDesigns.get(type);
+        if( typeDesign === undefined )
+            throw new Error(`type not declared ${type.name}`);
+
+        return typeDesign;
+    }
 
     static member(value, result?){
         return (target:any, memberName:string,  descriptor?:any) => {
@@ -136,47 +149,29 @@ export abstract class Design {
             let targetDesign = TypeDesign.declare(targetType);
 
             let reflectedType = Reflect.getMetadata('design:type', target, memberName);
+            let reflectedDesign: Design = Design.get(reflectedType);
+            let design = Design.exp(value, result);
 
-            console.log(`decl member ${targetType.name}.${memberName}`, isStatic? 'static': 'dynamic');
-            //console.log(` reflected type ${reflectedType.name}`);
-            console.log('descriptor', descriptor);
-
-
-            if( reflectedType === Function ) {
-
-            } else {
-
-            }
-
-            let valueDesign: Design = TypeDesign.get(reflectedType);
-//            if(value !== undefined) {
-            let exprDesign = Design.exp(value, result);
-
-            // must be type compatible with reflected
-            if( exprDesign.type !== valueDesign.type &&
-                !derivedType(exprDesign.type, valueDesign.type))
+            if( design.type !== reflectedDesign.type &&
+                !derivedType(design.type, reflectedDesign.type))
                 throw new Error(`especified type design not match with reflected metadata design`+
-                                `in ${targetType.name}.${memberName} member: ` +
-                                `user design ${exprDesign.type.name} ` +
-                                `reflected design ${valueDesign.type.name}`);
+                                `in ${targetType.name}.${memberName} member. ` +
+                                `design: '${design.type.name}', ` +
+                                `reflected '${reflectedDesign.type.name}'`);
 
-            valueDesign = exprDesign;
-//            }
-
-            targetDesign.members[memberName] = new MemberInfo(
-                    targetDesign,
-                    memberName,
-                    isStatic,
-                    valueDesign,
-            );
+            targetDesign.members.set(memberName, {
+                name: memberName,
+                isStatic,
+                design,
+            });
 
         };
     }
 
     static class() {
+        // TODO: constructor design...
         return (type:Type) => {
             let typeDesign = TypeDesign.declare(type);
-            console.log(`decl type ${type.name}`);
         };
     }
 
@@ -184,12 +179,12 @@ export abstract class Design {
 }
 
 
-interface TypeMember {
+export interface TypeMember {
     isStatic: boolean;
-    value: Design; // puede apuntar a un FunctionDesign
-    // metadata and hooks here??
+    design: Design;
+    name: string;
 };
-
+/*
 export class MemberInfo {
     constructor(public target: TypeDesign,
                 public name: string,
@@ -199,7 +194,7 @@ export class MemberInfo {
     }
 
 }
-
+*/
 export class TypeDesign implements Design {
     readonly kind: string = 'type';
     readonly isArray = false;
@@ -207,16 +202,10 @@ export class TypeDesign implements Design {
     readonly isTuple = false;
 
     derived = new Map<Type, TypeDesign>();
-    members: {
-        [memberName:string]: MemberInfo
-    };
-
-    // parameters: TupleDesign;
+    members = new Map<string, TypeMember>();
 
     protected constructor(public type: Type, public base: TypeDesign) {
-        this.members = base?
-            Object.create(base.members):
-            {};
+        this.members = new Map<string, TypeMember>(base? base.members.entries(): []);
         for(;base !== undefined; base = base.base)
             base.derived.set(type, this);
         allTypeDesigns.set(type, this);
@@ -231,7 +220,7 @@ export class TypeDesign implements Design {
             return typeDesign;
 
         let typeBase = baseType(type);
-        let baseDesign = typeBase? TypeDesign.get(typeBase): undefined;
+        let baseDesign = typeBase? Design.get(typeBase): undefined;
 
         if( type === Object ) // || Mapping type.
             return new AnyTypeDesign(type, baseDesign);
@@ -241,16 +230,7 @@ export class TypeDesign implements Design {
             return new TypeDesign(type, baseDesign);
     }
 
-    static get(type:Type) {
-        if( type === undefined || type === null)
-            throw new Error(`Unknow type ${type.name}`);
 
-        let typeDesign = allTypeDesigns.get(type);
-        if( typeDesign === undefined )
-            throw new Error(`type not declared ${type.name}`);
-
-        return typeDesign;
-    }
 
     toString() {
         return this.type.name;
@@ -293,7 +273,7 @@ export class MappingDesign implements Design {
                 public value:Design) {
     }
 
-    get type(){
+    get type() {
         return this.typeDesign.type;
     }
 

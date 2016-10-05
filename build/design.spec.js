@@ -126,10 +126,6 @@ describe('Custom type declaration', function () {
             __metadata('design:type', Object)
         ], MyBaseType.prototype, "dynamicDescriptor", null);
         __decorate([
-            design_1.Design.member([RegExp], Date), 
-            __metadata('design:type', Function)
-        ], MyBaseType.prototype, "foooo", void 0);
-        __decorate([
             design_1.Design.member([String, '...']), 
             __metadata('design:type', Array)
         ], MyBaseType, "staticProperty", void 0);
@@ -150,35 +146,33 @@ describe('Custom type declaration', function () {
         return MyBaseType;
     }());
     it('members', function () {
-        expect('staticProperty' in exp(MyBaseType).members).toBe(true);
+        expect(exp(MyBaseType).members.has('staticProperty')).toBe(true);
     });
-    it('static property', function () {
-        var property = exp(MyBaseType).members['staticProperty'];
-        expect(property.name === 'staticProperty').toBe(true);
-        expect(property.value === exp([String, '...'])).toBe(true);
-        expect(property.isStatic).toBe(true);
+    it('static member', function () {
+        var member = exp(MyBaseType).members.get('staticProperty');
+        expect(member.isStatic).toBe(true);
+        expect(member.design === exp([String, '...'])).toBe(true);
     });
     it('static descriptor', function () {
-        var property = exp(MyBaseType).members['staticDescriptor'];
-        expect(property.value === exp({})).toBe(true);
-        expect(property.isStatic).toBe(true);
+        var member = exp(MyBaseType).members.get('staticDescriptor');
+        expect(member.isStatic).toBe(true);
+        expect(member.design === exp({})).toBe(true);
     });
     it('static method', function () {
-        var property = exp(MyBaseType).members['staticMethod'];
+        var member = exp(MyBaseType).members.get('staticMethod');
         var prototype = exp([Number, Number, Number], Date);
-        expect(property.value === prototype).toBe(true);
-        expect(property.isStatic).toBe(true);
+        expect(member.isStatic).toBe(true);
+        expect(member.design === prototype).toBe(true);
     });
-    it('dynamic property', function () {
-        var property = exp(MyBaseType).members['dynamicProperty'];
-        expect(property.name === 'dynamicProperty').toBe(true);
-        expect(property.value === exp(Number)).toBe(true);
-        expect(property.isStatic).toBe(false);
+    it('dynamic member', function () {
+        var member = exp(MyBaseType).members.get('dynamicProperty');
+        expect(member.isStatic).toBe(false);
+        expect(member.design === exp(Number)).toBe(true);
     });
     it('dynamic descriptor', function () {
-        var property = exp(MyBaseType).members['dynamicDescriptor'];
-        expect(property.value === exp({ '': Number })).toBe(true);
-        expect(property.isStatic).toBe(false);
+        var member = exp(MyBaseType).members.get('dynamicDescriptor');
+        expect(member.isStatic).toBe(false);
+        expect(member.design === exp({ '': Number })).toBe(true);
     });
     /*
         it('inheritance chain', ()=> {

@@ -1,2 +1,2 @@
 export * from './type';
-export {Design} from './design';
+export * from './design';

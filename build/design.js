@@ -4,8 +4,16 @@ var __extends = (this && this.__extends) || function (d, b) {
     function __() { this.constructor = d; }
     d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
 };
-require('./polyfill');
+require('core-js/es6/map');
+require('core-js/es6/reflect');
+require('core-js/es7/reflect');
 var type_1 = require('./type');
+(function (DesignKind) {
+    DesignKind[DesignKind["Type"] = 0] = "Type";
+    DesignKind[DesignKind["Array"] = 1] = "Array";
+})(exports.DesignKind || (exports.DesignKind = {}));
+var DesignKind = exports.DesignKind;
+;
 var Design = (function () {
     function Design() {
     }
@@ -22,7 +30,7 @@ var Design = (function () {
                 throw new Error('function parsing not implemented');
             }
             else {
-                return TypeDesign.get(exp);
+                return Design.get(exp);
             }
         }
         // parse direct names
@@ -48,7 +56,7 @@ var Design = (function () {
         var expType = type_1.typeOf(exp);
         // array parsing
         if (type_1.instanceOf(exp, Array)) {
-            var typeDesign = TypeDesign.get(expType);
+            var typeDesign = Design.get(expType);
             if (typeDesign === undefined)
                 throw new Error("Unknow type " + exp.name);
             if (exp.length == 0)
@@ -79,56 +87,57 @@ var Design = (function () {
         }
         throw new Error("Unknow type design expresion " + exp);
     };
+    Design.get = function (type) {
+        if (type === undefined || type === null)
+            throw new Error("Unknow type " + type.name);
+        var typeDesign = allTypeDesigns.get(type);
+        if (typeDesign === undefined)
+            throw new Error("type not declared " + type.name);
+        return typeDesign;
+    };
     Design.member = function (value, result) {
         return function (target, memberName, descriptor) {
             var isStatic = type_1.instanceOf(target, type_1.Type);
             var targetType = isStatic ? target : target.constructor;
             var targetDesign = TypeDesign.declare(targetType);
             var reflectedType = Reflect.getMetadata('design:type', target, memberName);
-            console.log("decl member " + targetType.name + "." + memberName, isStatic ? 'static' : 'dynamic');
-            //console.log(` reflected type ${reflectedType.name}`);
-            console.log('descriptor', descriptor);
-            if (reflectedType === Function) {
-            }
-            else {
-            }
-            var valueDesign = TypeDesign.get(reflectedType);
-            //            if(value !== undefined) {
-            var exprDesign = Design.exp(value, result);
-            // must be type compatible with reflected
-            if (exprDesign.type !== valueDesign.type &&
-                !type_1.derivedType(exprDesign.type, valueDesign.type))
+            var reflectedDesign = Design.get(reflectedType);
+            var design = Design.exp(value, result);
+            if (design.type !== reflectedDesign.type &&
+                !type_1.derivedType(design.type, reflectedDesign.type))
                 throw new Error("especified type design not match with reflected metadata design" +
-                    ("in " + targetType.name + "." + memberName + " member: ") +
-                    ("user design " + exprDesign.type.name + " ") +
-                    ("reflected design " + valueDesign.type.name));
-            valueDesign = exprDesign;
-            //            }
-            targetDesign.members[memberName] = new MemberInfo(targetDesign, memberName, isStatic, valueDesign);
+                    ("in " + targetType.name + "." + memberName + " member. ") +
+                    ("design: '" + design.type.name + "', ") +
+                    ("reflected '" + reflectedDesign.type.name + "'"));
+            targetDesign.members.set(memberName, {
+                name: memberName,
+                isStatic: isStatic,
+                design: design,
+            });
         };
     };
     Design.class = function () {
+        // TODO: constructor design...
         return function (type) {
             var typeDesign = TypeDesign.declare(type);
-            console.log("decl type " + type.name);
         };
     };
     return Design;
 }());
 exports.Design = Design;
 ;
-var MemberInfo = (function () {
-    function MemberInfo(target, name, isStatic, value) {
-        this.target = target;
-        this.name = name;
-        this.isStatic = isStatic;
-        this.value = value;
+/*
+export class MemberInfo {
+    constructor(public target: TypeDesign,
+                public name: string,
+                public isStatic: boolean,
+                public value: Design
+            ) {
     }
-    return MemberInfo;
-}());
-exports.MemberInfo = MemberInfo;
+
+}
+*/
 var TypeDesign = (function () {
-    // parameters: TupleDesign;
     function TypeDesign(type, base) {
         this.type = type;
         this.base = base;
@@ -137,9 +146,8 @@ var TypeDesign = (function () {
         this.isMapping = false;
         this.isTuple = false;
         this.derived = new Map();
-        this.members = base ?
-            Object.create(base.members) :
-            {};
+        this.members = new Map();
+        this.members = new Map(base ? base.members.entries() : []);
         for (; base !== undefined; base = base.base)
             base.derived.set(type, this);
         allTypeDesigns.set(type, this);
@@ -151,21 +159,13 @@ var TypeDesign = (function () {
         if (typeDesign !== undefined)
             return typeDesign;
         var typeBase = type_1.baseType(type);
-        var baseDesign = typeBase ? TypeDesign.get(typeBase) : undefined;
+        var baseDesign = typeBase ? Design.get(typeBase) : undefined;
         if (type === Object)
             return new AnyTypeDesign(type, baseDesign);
         else if (type === Array || type_1.derivedType(type, Array))
             return new AnyArrayDesign(type, baseDesign);
         else
             return new TypeDesign(type, baseDesign);
-    };
-    TypeDesign.get = function (type) {
-        if (type === undefined || type === null)
-            throw new Error("Unknow type " + type.name);
-        var typeDesign = allTypeDesigns.get(type);
-        if (typeDesign === undefined)
-            throw new Error("type not declared " + type.name);
-        return typeDesign;
     };
     TypeDesign.prototype.toString = function () {
         return this.type.name;

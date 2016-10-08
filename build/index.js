@@ -25,5 +25,4 @@ function __export(m) {
 }
 __export(require('./type'));
 __export(require('./design'));
-__export(require('./exoskeleton'));
 //# sourceMappingURL=index.js.map

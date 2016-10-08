@@ -8,8 +8,8 @@ export declare enum DesignKind {
 }
 export declare abstract class Design {
     private constructor();
-    readonly type: Type;
-    readonly derived?: Map<Type, Design>;
+    readonly type: Type<any>;
+    readonly derived?: Map<Type<any>, Design>;
     readonly base?: Design;
     readonly members?: Map<string, TypeMember>;
     readonly kind: string;
@@ -22,9 +22,9 @@ export declare abstract class Design {
     readonly parameters?: Design;
     readonly result?: Design;
     static exp(exp: any, result?: any): Design;
-    static get(type: Type): TypeDesign;
+    static get(type: Type<any>): TypeDesign;
     static member(value: any, result?: any): (target: any, memberName: string, descriptor?: any) => void;
-    static class(): (type: Type) => void;
+    static class(): (type: Type<any>) => void;
 }
 export interface TypeMember {
     isStatic: boolean;
@@ -32,16 +32,16 @@ export interface TypeMember {
     name: string;
 }
 export declare class TypeDesign implements Design {
-    type: Type;
+    type: Type<any>;
     base: TypeDesign;
     readonly kind: string;
     readonly isArray: boolean;
     readonly isMapping: boolean;
     readonly isTuple: boolean;
-    derived: Map<Type, TypeDesign>;
+    derived: Map<Type<any>, TypeDesign>;
     members: Map<string, TypeMember>;
-    protected constructor(type: Type, base: TypeDesign);
-    static declare(type: Type): TypeDesign;
+    protected constructor(type: Type<any>, base: TypeDesign);
+    static declare(type: Type<any>): TypeDesign;
     toString(): string;
     derivedFrom(baseDesign: TypeDesign): boolean;
 }
@@ -58,7 +58,7 @@ export declare class MappingDesign implements Design {
     readonly isArray: boolean;
     readonly isMapping: boolean;
     constructor(typeDesign: AnyTypeDesign, key: Design, value: Design);
-    readonly type: Type;
+    readonly type: Type<any>;
     toString(): string;
 }
 export declare class AnyArrayDesign extends TypeDesign implements Design {
@@ -80,7 +80,7 @@ export declare class VariadicDesign implements Design {
     readonly isArray: boolean;
     readonly isTuple: boolean;
     constructor(typeDesign: AnyArrayDesign, value: Design);
-    readonly type: Type;
+    readonly type: Type<any>;
     readonly key: TypeDesign;
     toString(): string;
 }
@@ -94,7 +94,7 @@ export declare class TupleDesign implements Design {
     tupleDesigns: Map<Design, TupleDesign>;
     functionDesigns: Map<Design, FunctionDesign>;
     constructor(typeDesign: AnyArrayDesign, value: Design[]);
-    readonly type: Type;
+    readonly type: Type<any>;
     readonly key: TypeDesign;
     readonly length: number;
     toString(): string;

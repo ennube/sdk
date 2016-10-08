@@ -18,15 +18,11 @@
   },
   "homepage": "https://github.com/ennube/sdk#readme",
   "dependencies": {
-    "change-case": "^3.0.0",
     "core-js": "^2.4.1",
     "cycler": "^0.1.2",
-    "elasticsearch": "^11.0.1",
     "reflect-metadata": "^0.1.8"
   },
   "devDependencies": {
-    "@types/change-case": "0.0.30",
-    "@types/elasticsearch": "0.0.6",
     "@types/jasmine": "^2.2.34",
     "@types/reflect-metadata": "0.0.4",
     "jasmine": "^2.5.2"

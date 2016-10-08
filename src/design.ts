@@ -2,7 +2,26 @@ import 'core-js/es6/map';
 import 'core-js/es6/reflect';
 import 'core-js/es7/reflect';
 
-import {Type, typeOf, baseType, derivedType, instanceOf} from './type';
+import { Type, typeOf, baseTypeOf, isDerivedType, isInstanceOf } from './type';
+
+/*
+TODO:
+    Soportar como mappings el tipo Map (clase base Map, key y value en funcion del mapping)
+    Soportar como Secuencias el tipo Set
+    cambiar variadic por tipo sequence.
+    ----
+    mas abtracto,    Soportar  tipos paramétricos, como Map<tipo, tipo>,
+    un tipo parametrico es un tipo: Map, que declara una serie de parametros,
+    los parametros (otros tipos), dichos parametros son definidos por los diseños
+    de esa clase base.
+
+    De esta forma, array seria un tipo que declara un parametro: element
+    las vistas del array deben entonces definir element.
+
+    Un mapping, ... key value, un Map, key value, un Set, element...
+
+    extrapolar esto a una funcion requiere aun de un analisis mas delicado.
+*/
 
 export enum DesignKind {
     Type,
@@ -11,8 +30,8 @@ export enum DesignKind {
 export abstract class Design {
     private constructor() { }
 
-    readonly type: Type;
-    readonly derived?: Map<Type, Design>;
+    readonly type: Type<any>;
+    readonly derived?: Map<Type<any>, Design>;
 
     /*
         base design this design extends.
@@ -56,7 +75,7 @@ export abstract class Design {
         Parse a design expression
      */
     static exp(exp, result?): Design {
-        if( instanceOf(exp, Type) ) {
+        if( isInstanceOf(exp, Type) ) {
             if(exp.name == '') {
                 throw new Error('function parsing not implemented');
             }
@@ -66,7 +85,7 @@ export abstract class Design {
         }
 
         // parse direct names
-        if( instanceOf(exp, String) ) {
+        if( isInstanceOf(exp, String) ) {
             if( exp == 'Object' || exp == '*')
                 return anyDesign;
             if( exp == 'Array')
@@ -88,11 +107,11 @@ export abstract class Design {
 
         let expType = typeOf(exp);
         // array parsing
-        if( instanceOf(exp, Array) ) {
+        if( isInstanceOf(exp, Array) ) {
 
-            let typeDesign = Design.get(expType)as AnyArrayDesign;
+            let typeDesign = Design.get(expType) as AnyArrayDesign;
             if( typeDesign === undefined )
-                throw new Error(`Unknow type ${exp.name}`);
+                throw new Error(`Unknow type ${expType.name}`);
 
             if( exp.length == 0 )
                 return typeDesign;
@@ -130,7 +149,7 @@ export abstract class Design {
         throw new Error(`Unknow type design expresion ${exp}`);
     }
 
-    static get(type:Type) {
+    static get(type: Type<any>) {
         if( type === undefined || type === null)
             throw new Error(`Unknow type ${type.name}`);
 
@@ -144,7 +163,7 @@ export abstract class Design {
     static member(value, result?){
         return (target:any, memberName:string,  descriptor?:any) => {
 
-            let isStatic = instanceOf(target, Type);
+            let isStatic = isInstanceOf(target, Type);
             let targetType = isStatic? target: target.constructor;
             let targetDesign = TypeDesign.declare(targetType);
 
@@ -153,8 +172,8 @@ export abstract class Design {
             let design = Design.exp(value, result);
 
             if( design.type !== reflectedDesign.type &&
-                !derivedType(design.type, reflectedDesign.type))
-                throw new Error(`especified type design not match with reflected metadata design`+
+                !isDerivedType(design.type, reflectedDesign.type))
+                throw new Error(`especified type design not match with reflected metadata design` +
                                 `in ${targetType.name}.${memberName} member. ` +
                                 `design: '${design.type.name}', ` +
                                 `reflected '${reflectedDesign.type.name}'`);
@@ -170,7 +189,7 @@ export abstract class Design {
 
     static class() {
         // TODO: constructor design...
-        return (type:Type) => {
+        return (type: Type<any>) => {
             let typeDesign = TypeDesign.declare(type);
         };
     }
@@ -184,34 +203,24 @@ export interface TypeMember {
     design: Design;
     name: string;
 };
-/*
-export class MemberInfo {
-    constructor(public target: TypeDesign,
-                public name: string,
-                public isStatic: boolean,
-                public value: Design
-            ) {
-    }
 
-}
-*/
 export class TypeDesign implements Design {
     readonly kind: string = 'type';
     readonly isArray = false;
     readonly isMapping = false;
     readonly isTuple = false;
 
-    derived = new Map<Type, TypeDesign>();
+    derived = new Map<Type<any>, TypeDesign>();
     members = new Map<string, TypeMember>();
 
-    protected constructor(public type: Type, public base: TypeDesign) {
+    protected constructor(public type: Type<any>, public base: TypeDesign) {
         this.members = new Map<string, TypeMember>(base? base.members.entries(): []);
         for(;base !== undefined; base = base.base)
             base.derived.set(type, this);
         allTypeDesigns.set(type, this);
     }
 
-    static declare(type:Type) {
+    static declare(type:Type<any>) {
         if( type === undefined || type === null)
             throw new Error(`Unknow type ${type.name}`);
 
@@ -219,12 +228,12 @@ export class TypeDesign implements Design {
         if( typeDesign !== undefined )
             return typeDesign;
 
-        let typeBase = baseType(type);
+        let typeBase = baseTypeOf(type);
         let baseDesign = typeBase? Design.get(typeBase): undefined;
 
         if( type === Object ) // || Mapping type.
             return new AnyTypeDesign(type, baseDesign);
-        else if(type === Array || derivedType(type, Array))
+        else if(type === Array || isDerivedType(type, Array))
             return new AnyArrayDesign(type, baseDesign);
         else
             return new TypeDesign(type, baseDesign);
@@ -238,7 +247,7 @@ export class TypeDesign implements Design {
 
     derivedFrom(baseDesign: TypeDesign) {
         return this.type === baseDesign.type ||
-                derivedType(this.type, baseDesign.type);
+                isDerivedType(this.type, baseDesign.type);
     }
 
 }
@@ -407,7 +416,7 @@ export class FunctionDesign implements Design {
 
 
 
-const allTypeDesigns = new Map<Type, TypeDesign>();
+const allTypeDesigns = new Map<Type<any>, TypeDesign>();
 
 const anyDesign = TypeDesign.declare(Object) as AnyTypeDesign;
 const anyArrayDesign = TypeDesign.declare(Array) as AnyArrayDesign;

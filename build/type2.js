@@ -1,5 +1,5 @@
 "use strict";
-exports.Type = Function; // a Type IS a Function
+exports.Type = Function;
 function typeOf(value) {
     if (value === undefined || value === null)
         return undefined;
@@ -9,13 +9,11 @@ exports.typeOf = typeOf;
 function baseTypeOf(type) {
     if (type === undefined || type === null)
         throw new Error("base type of " + type);
-    if (type === Object)
-        return undefined;
     return Object.getPrototypeOf(type.prototype).constructor;
 }
 exports.baseTypeOf = baseTypeOf;
-//export function isDerivedType<T>(type: Type<any>, base: Type<T>): type is Type<T> {
 function isDerivedType(type, base) {
+    //export function isDerivedType(type: Type<any>, base: Type<any>): boolean {
     if (base === undefined || base === null)
         throw new Error("derived type of " + base);
     if (type === undefined || type === null)
@@ -33,4 +31,4 @@ function isInstanceOf(value, type) {
     return valueType === type || valueType.prototype instanceof type;
 }
 exports.isInstanceOf = isInstanceOf;
-//# sourceMappingURL=type.js.map
+//# sourceMappingURL=type2.js.map

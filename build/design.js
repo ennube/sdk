@@ -8,6 +8,24 @@ require('core-js/es6/map');
 require('core-js/es6/reflect');
 require('core-js/es7/reflect');
 var type_1 = require('./type');
+/*
+TODO:
+    Soportar como mappings el tipo Map (clase base Map, key y value en funcion del mapping)
+    Soportar como Secuencias el tipo Set
+    cambiar variadic por tipo sequence.
+    ----
+    mas abtracto,    Soportar  tipos paramétricos, como Map<tipo, tipo>,
+    un tipo parametrico es un tipo: Map, que declara una serie de parametros,
+    los parametros (otros tipos), dichos parametros son definidos por los diseños
+    de esa clase base.
+
+    De esta forma, array seria un tipo que declara un parametro: element
+    las vistas del array deben entonces definir element.
+
+    Un mapping, ... key value, un Map, key value, un Set, element...
+
+    extrapolar esto a una funcion requiere aun de un analisis mas delicado.
+*/
 (function (DesignKind) {
     DesignKind[DesignKind["Type"] = 0] = "Type";
     DesignKind[DesignKind["Array"] = 1] = "Array";
@@ -25,7 +43,7 @@ var Design = (function () {
         Parse a design expression
      */
     Design.exp = function (exp, result) {
-        if (type_1.instanceOf(exp, type_1.Type)) {
+        if (type_1.isInstanceOf(exp, type_1.Type)) {
             if (exp.name == '') {
                 throw new Error('function parsing not implemented');
             }
@@ -34,7 +52,7 @@ var Design = (function () {
             }
         }
         // parse direct names
-        if (type_1.instanceOf(exp, String)) {
+        if (type_1.isInstanceOf(exp, String)) {
             if (exp == 'Object' || exp == '*')
                 return anyDesign;
             if (exp == 'Array')
@@ -55,10 +73,10 @@ var Design = (function () {
         }
         var expType = type_1.typeOf(exp);
         // array parsing
-        if (type_1.instanceOf(exp, Array)) {
+        if (type_1.isInstanceOf(exp, Array)) {
             var typeDesign = Design.get(expType);
             if (typeDesign === undefined)
-                throw new Error("Unknow type " + exp.name);
+                throw new Error("Unknow type " + expType.name);
             if (exp.length == 0)
                 return typeDesign;
             if (exp[exp.length - 1] == '...') {
@@ -97,14 +115,14 @@ var Design = (function () {
     };
     Design.member = function (value, result) {
         return function (target, memberName, descriptor) {
-            var isStatic = type_1.instanceOf(target, type_1.Type);
+            var isStatic = type_1.isInstanceOf(target, type_1.Type);
             var targetType = isStatic ? target : target.constructor;
             var targetDesign = TypeDesign.declare(targetType);
             var reflectedType = Reflect.getMetadata('design:type', target, memberName);
             var reflectedDesign = Design.get(reflectedType);
             var design = Design.exp(value, result);
             if (design.type !== reflectedDesign.type &&
-                !type_1.derivedType(design.type, reflectedDesign.type))
+                !type_1.isDerivedType(design.type, reflectedDesign.type))
                 throw new Error("especified type design not match with reflected metadata design" +
                     ("in " + targetType.name + "." + memberName + " member. ") +
                     ("design: '" + design.type.name + "', ") +
@@ -126,17 +144,6 @@ var Design = (function () {
 }());
 exports.Design = Design;
 ;
-/*
-export class MemberInfo {
-    constructor(public target: TypeDesign,
-                public name: string,
-                public isStatic: boolean,
-                public value: Design
-            ) {
-    }
-
-}
-*/
 var TypeDesign = (function () {
     function TypeDesign(type, base) {
         this.type = type;
@@ -158,11 +165,11 @@ var TypeDesign = (function () {
         var typeDesign = allTypeDesigns.get(type);
         if (typeDesign !== undefined)
             return typeDesign;
-        var typeBase = type_1.baseType(type);
+        var typeBase = type_1.baseTypeOf(type);
         var baseDesign = typeBase ? Design.get(typeBase) : undefined;
         if (type === Object)
             return new AnyTypeDesign(type, baseDesign);
-        else if (type === Array || type_1.derivedType(type, Array))
+        else if (type === Array || type_1.isDerivedType(type, Array))
             return new AnyArrayDesign(type, baseDesign);
         else
             return new TypeDesign(type, baseDesign);
@@ -172,7 +179,7 @@ var TypeDesign = (function () {
     };
     TypeDesign.prototype.derivedFrom = function (baseDesign) {
         return this.type === baseDesign.type ||
-            type_1.derivedType(this.type, baseDesign.type);
+            type_1.isDerivedType(this.type, baseDesign.type);
     };
     return TypeDesign;
 }());
